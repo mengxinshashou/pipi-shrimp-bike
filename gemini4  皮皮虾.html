@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>皮皮虾骑自行车 - 2D SVG 互动动画</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.78);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+    }
+    input[type="range"] {
+      accent-color: #f43f5e;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-between p-3 sm:p-5 overflow-x-hidden">
+
+  <!-- Top Header -->
+  <header class="w-full max-w-5xl flex flex-wrap items-center justify-between gap-3 mb-3">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 via-fuchsia-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-rose-500/20 text-xl font-extrabold">
+        🦐
+      </div>
+      <div>
+        <h1 class="text-lg sm:text-xl font-extrabold tracking-tight bg-gradient-to-r from-rose-400 via-fuchsia-300 to-cyan-300 bg-clip-text text-transparent">
+          皮皮虾，我们走！ · SVG 2D 骑行动画
+        </h1>
+        <p class="text-xs text-slate-400">纯矢量 SVG 骨骼联动 + 双连杆逆运动学 (IK) 踩踏物理模拟</p>
+      </div>
+    </div>
+
+    <!-- Live Telemetry Badges -->
+    <div class="flex items-center gap-2 text-xs font-semibold">
+      <div class="glass-panel px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+        <span class="text-slate-400">时速</span>
+        <span id="speedReadout" class="text-rose-400 font-mono text-sm">28.5</span>
+        <span class="text-slate-500">km/h</span>
+      </div>
+      <div class="glass-panel px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+        <span class="text-slate-400">踏频</span>
+        <span id="cadenceReadout" class="text-cyan-400 font-mono text-sm">90</span>
+        <span class="text-slate-500">RPM</span>
+      </div>
+      <div class="glass-panel px-3 py-1.5 rounded-lg hidden sm:flex items-center gap-1.5">
+        <span class="text-slate-400">里程</span>
+        <span id="distanceReadout" class="text-emerald-400 font-mono text-sm">0.00</span>
+        <span class="text-slate-500">km</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main SVG Stage -->
+  <main class="w-full max-w-5xl relative rounded-2xl overflow-hidden shadow-2xl border border-slate-800 bg-slate-900">
+    <!-- Floating Action Toast -->
+    <div id="speechBubble" class="pointer-events-none absolute top-4 left-4 z-20 transition-all duration-300 opacity-0 translate-y-2">
+      <div class="bg-white/95 text-slate-900 font-bold text-xs sm:text-sm px-3.5 py-2 rounded-2xl rounded-bl-none shadow-xl border-2 border-rose-400 flex items-center gap-2">
+        <span id="speechText">皮皮虾，我们走！💨</span>
+      </div>
+    </div>
+
+    <!-- Interactive Hint -->
+    <div class="pointer-events-none absolute top-3 right-3 z-10 text-[11px] text-white/70 bg-slate-950/50 px-2.5 py-1 rounded-full backdrop-blur-sm">
+      点击画面或按空格键可触发跳跃 · 双击触发螳螂拳冲刺
+    </div>
+
+    <!-- The SVG Canvas -->
+    <svg id="stageSvg" viewBox="0 0 1000 540" class="w-full h-auto block cursor-pointer" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <!-- Sky / Water Gradients -->
+        <linearGradient id="bgGradOcean" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#042f4b" />
+          <stop offset="55%" stop-color="#075985" />
+          <stop offset="82%" stop-color="#0e7490" />
+          <stop offset="100%" stop-color="#155e75" />
+        </linearGradient>
+        <linearGradient id="bgGradSunset" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#1e1b4b" />
+          <stop offset="35%" stop-color="#701a75" />
+          <stop offset="68%" stop-color="#e11d48" />
+          <stop offset="85%" stop-color="#fb923c" />
+          <stop offset="100%" stop-color="#fde047" />
+        </linearGradient>
+        <linearGradient id="bgGradNeon" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#020617" />
+          <stop offset="50%" stop-color="#0f172a" />
+          <stop offset="85%" stop-color="#1e1b4b" />
+          <stop offset="100%" stop-color="#3b0764" />
+        </linearGradient>
+
+        <!-- Caustic Light Rays -->
+        <linearGradient id="rayGrad" x1="0" y1="0" x2="0.2" y2="1">
+          <stop offset="0%" stop-color="#bae6fd" stop-opacity="0.24" />
+          <stop offset="100%" stop-color="#bae6fd" stop-opacity="0" />
+        </linearGradient>
+
+        <!-- Road Gradient -->
+        <linearGradient id="roadGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#1e293b" />
+          <stop offset="15%" stop-color="#0f172a" />
+          <stop offset="100%" stop-color="#020617" />
+        </linearGradient>
+
+        <!-- Mantis Shrimp Shell Gradients (Dynamic via JS or presets) -->
+        <!-- Classic Oratosquilla (Pink/Purple/Coral) -->
+        <linearGradient id="shellGradClassic" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#fb7185" />
+          <stop offset="45%" stop-color="#d946ef" />
+          <stop offset="100%" stop-color="#7e22ce" />
+        </linearGradient>
+        <linearGradient id="bellyGradClassic" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#fda4af" />
+          <stop offset="100%" stop-color="#f472b6" />
+        </linearGradient>
+
+        <!-- Peacock Mantis Shrimp (Emerald/Cyan/Orange/Magenta) -->
+        <linearGradient id="shellGradPeacock" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#10b981" />
+          <stop offset="45%" stop-color="#06b6d4" />
+          <stop offset="80%" stop-color="#3b82f6" />
+          <stop offset="100%" stop-color="#ec4899" />
+        </linearGradient>
+        <linearGradient id="bellyGradPeacock" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#fb923c" />
+          <stop offset="100%" stop-color="#ef4444" />
+        </linearGradient>
+
+        <!-- Golden Crispy Shrimp (Gold/Amber/Orange) -->
+        <linearGradient id="shellGradGold" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#fde047" />
+          <stop offset="50%" stop-color="#f59e0b" />
+          <stop offset="100%" stop-color="#b45309" />
+        </linearGradient>
+        <linearGradient id="bellyGradGold" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#fef08a" />
+          <stop offset="100%" stop-color="#fbbf24" />
+        </linearGradient>
+
+        <!-- Raptorial Claw Gradient -->
+        <linearGradient id="clawGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#f43f5e" />
+          <stop offset="55%" stop-color="#fb7185" />
+          <stop offset="100%" stop-color="#fef08a" />
+        </linearGradient>
+
+        <!-- Bike Frame Metallic Gradient -->
+        <linearGradient id="bikeFrameGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#22d3ee" />
+          <stop offset="50%" stop-color="#0284c7" />
+          <stop offset="100%" stop-color="#1e3a8a" />
+        </linearGradient>
+
+        <!-- Chrome Rim Gradient -->
+        <linearGradient id="chromeGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#f8fafc" />
+          <stop offset="50%" stop-color="#94a3b8" />
+          <stop offset="100%" stop-color="#cbd5e1" />
+        </linearGradient>
+
+        <!-- Glow Filter -->
+        <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="4" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+
+        <!-- Shadow Filter -->
+        <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
+          <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000000" flood-opacity="0.35" />
+        </filter>
+      </defs>
+
+      <!-- ================= 1. BACKGROUND LAYER ================= -->
+      <rect id="skyRect" x="0" y="0" width="1000" height="430" fill="url(#bgGradOcean)" />
+
+      <!-- Sun / Moon / Deep-sea Orb -->
+      <g id="celestialGroup">
+        <circle id="celestialBody" cx="780" cy="115" r="56" fill="#fef08a" opacity="0.22" />
+        <circle id="celestialCore" cx="780" cy="115" r="38" fill="#fde047" opacity="0.35" />
+      </g>
+
+      <!-- Underwater Light Rays (Visible in Ocean mode) -->
+      <g id="lightRaysGroup" opacity="0.85">
+        <polygon points="120,0 260,0 380,430 180,430" fill="url(#rayGrad)" />
+        <polygon points="390,0 510,0 640,430 470,430" fill="url(#rayGrad)" />
+        <polygon points="690,0 840,0 960,430 770,430" fill="url(#rayGrad)" />
+      </g>
+
+      <!-- Distant Parallax Silhouettes (Coral / Mountains / City) -->
+      <g id="farBgGroup" opacity="0.45" fill="#0369a1">
+        <path id="farHillsPath" d="M0,430 L0,340 Q80,290 160,335 T340,310 T520,345 T700,300 T880,335 T1000,320 L1000,430 Z" />
+      </g>
+
+      <!-- Midground Scrolling Elements (Kelp, Coral, Mileposts, Jellyfish) -->
+      <g id="midBgGroup"></g>
+
+      <!-- ================= 2. ROAD & GROUND LAYER ================= -->
+      <g id="roadGroup">
+        <!-- Sandy / Curb Shoulder -->
+        <rect id="roadShoulder" x="0" y="422" width="1000" height="12" fill="#0ea5e9" opacity="0.4" />
+        <!-- Main Asphalt Road -->
+        <rect x="0" y="430" width="1000" height="110" fill="url(#roadGrad)" />
+        <!-- Road Top Highlight Line -->
+        <line x1="0" y1="432" x2="1000" y2="432" stroke="#38bdf8" stroke-width="2" stroke-opacity="0.5" />
+        <!-- Scrolling Road Dashes -->
+        <line id="roadDashes" x1="0" y1="478" x2="1200" y2="478" stroke="#facc15" stroke-width="5" stroke-dasharray="48 42" stroke-linecap="round" opacity="0.85" />
+        <!-- Foreground Scrolling Pebbles -->
+        <g id="pebblesGroup" fill="#475569"></g>
+      </g>
+
+      <!-- Dynamic Ground Shadow under Bicycle -->
+      <ellipse id="bikeShadow" cx="500" cy="458" rx="175" ry="14" fill="#020617" opacity="0.6" />
+
+      <!-- ================= 3. BICYCLE & MANTIS SHRIMP RIG ================= -->
+      <!-- Master rig transforms for bunny-hop height (Y) and wheelie pitch (rotate around rear axle 350,375) -->
+      <g id="masterBikeRig" filter="url(#softShadow)">
+
+        <!-- -------- 3A. FAR SIDE (LEFT) SHRIMP LIMBS (Behind bicycle frame) -------- -->
+        <!-- Left Raptorial Arm (Far Handlebar Grip) -->
+        <g id="leftArmGroup" opacity="0.75">
+          <path id="leftUpperArm" d="M510,200 L565,220" stroke="#be185d" stroke-width="11" stroke-linecap="round" />
+          <path id="leftForeArm" d="M565,220 L595,205" stroke="#9d174d" stroke-width="9" stroke-linecap="round" />
+        </g>
+
+        <!-- Left Pedaling Leg (Behind Crank) -->
+        <g id="leftLegGroup" opacity="0.72">
+          <line id="leftThigh" x1="445" y1="265" x2="480" y2="320" stroke="#9d174d" stroke-width="12" stroke-linecap="round" />
+          <line id="leftShin" x1="480" y1="320" x2="485" y2="375" stroke="#be185d" stroke-width="9" stroke-linecap="round" />
+          <circle id="leftKneeJoint" cx="480" cy="320" r="6" fill="#f43f5e" />
+          <ellipse id="leftFoot" cx="485" cy="375" rx="12" ry="6" fill="#831843" />
+        </g>
+
+        <!-- Left Crank & Pedal (Behind Chainring) -->
+        <g id="leftCrankGroup">
+          <line id="leftCrankArm" x1="475" y1="375" x2="475" y2="335" stroke="#64748b" stroke-width="7" stroke-linecap="round" />
+          <rect id="leftPedal" x="461" y="330" width="28" height="9" rx="3" fill="#334155" stroke="#94a3b8" stroke-width="1.5" />
+        </g>
+
+        <!-- -------- 3B. BICYCLE WHEELS -------- -->
+        <!-- Rear Wheel (Center: 350, 375, Radius: 72) -->
+        <g id="rearWheelPos" transform="translate(350, 375)">
+          <g id="rearWheelSpin">
+            <!-- Tire -->
+            <circle r="72" fill="none" stroke="#0f172a" stroke-width="14" />
+            <circle r="72" fill="none" stroke="#334155" stroke-width="10" stroke-dasharray="10 8" />
+            <!-- Rim -->
+            <circle r="63" fill="none" stroke="url(#chromeGrad)" stroke-width="4.5" />
+            <circle r="59" fill="none" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.7" />
+            <!-- Spokes (12 spokes) -->
+            <g stroke="#cbd5e1" stroke-width="1.6" opacity="0.85">
+              <line x1="-59" y1="0" x2="59" y2="0" />
+              <line x1="0" y1="-59" x2="0" y2="59" />
+              <line x1="-41.7" y1="-41.7" x2="41.7" y2="41.7" />
+              <line x1="-41.7" y1="41.7" x2="41.7" y2="-41.7" />
+              <line x1="-51" y1="-29.5" x2="51" y2="29.5" />
+              <line x1="-29.5" y1="-51" x2="29.5" y2="51" />
+              <line x1="-51" y1="29.5" x2="51" y2="-29.5" />
+              <line x1="-29.5" y1="51" x2="29.5" y2="-51" />
+            </g>
+            <!-- Valve & Reflector -->
+            <rect x="-5" y="44" width="10" height="6" rx="3" fill="#fb923c" />
+            <circle cx="-42" cy="-22" r="4.5" fill="#22d3ee" />
+            <!-- Rear Cassette -->
+            <circle r="16" fill="#475569" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="4 3" />
+            <circle r="9" fill="#1e293b" />
+          </g>
+        </g>
+
+        <!-- Front Wheel (Center: 640, 375, Radius: 72) -->
+        <g id="frontWheelPos" transform="translate(640, 375)">
+          <g id="frontWheelSpin">
+            <!-- Tire -->
+            <circle r="72" fill="none" stroke="#0f172a" stroke-width="14" />
+            <circle r="72" fill="none" stroke="#334155" stroke-width="10" stroke-dasharray="10 8" />
+            <!-- Rim -->
+            <circle r="63" fill="none" stroke="url(#chromeGrad)" stroke-width="4.5" />
+            <circle r="59" fill="none" stroke="#f43f5e" stroke-width="1.5" stroke-opacity="0.7" />
+            <!-- Spokes -->
+            <g stroke="#cbd5e1" stroke-width="1.6" opacity="0.85">
+              <line x1="-59" y1="0" x2="59" y2="0" />
+              <line x1="0" y1="-59" x2="0" y2="59" />
+              <line x1="-41.7" y1="-41.7" x2="41.7" y2="41.7" />
+              <line x1="-41.7" y1="41.7" x2="41.7" y2="-41.7" />
+              <line x1="-51" y1="-29.5" x2="51" y2="29.5" />
+              <line x1="-29.5" y1="-51" x2="29.5" y2="51" />
+              <line x1="-51" y1="29.5" x2="51" y2="-29.5" />
+              <line x1="-29.5" y1="51" x2="29.5" y2="-51" />
+            </g>
+            <!-- Reflector -->
+            <rect x="44" y="-5" width="6" height="10" rx="3" fill="#fb923c" />
+            <circle cx="22" cy="-42" r="4.5" fill="#f43f5e" />
+            <circle r="10" fill="#334155" stroke="#e2e8f0" stroke-width="2" />
+          </g>
+        </g>
+
+        <!-- -------- 3C. BICYCLE DRIVETRAIN & FRAME -------- -->
+        <!-- Drive Chain (Animated stroke-dashoffset) -->
+        <path id="bikeChain" d="M 350,362 L 475,351 A 24,24 0 1,1 475,399 L 350,388 A 13,13 0 1,1 350,362 Z"
+              fill="none" stroke="#94a3b8" stroke-width="3.5" stroke-dasharray="6 4" />
+
+        <!-- Bicycle Diamond Frame -->
+        <g id="bikeFrame" stroke-linecap="round" stroke-linejoin="round">
+          <!-- Seat Stay (Rear axle to Seat post cluster) -->
+          <line x1="350" y1="375" x2="432" y2="262" stroke="url(#bikeFrameGrad)" stroke-width="7.5" />
+          <!-- Chain Stay (Rear axle to Bottom bracket) -->
+          <line x1="350" y1="375" x2="475" y2="375" stroke="url(#bikeFrameGrad)" stroke-width="8.5" />
+          <!-- Seat Tube (Bottom bracket to Seat post cluster) -->
+          <line x1="475" y1="375" x2="424" y2="245" stroke="#cbd5e1" stroke-width="7" />
+          <line x1="475" y1="375" x2="432" y2="262" stroke="url(#bikeFrameGrad)" stroke-width="9.5" />
+          <!-- Down Tube (Bottom bracket to Head tube) -->
+          <line x1="475" y1="375" x2="588" y2="258" stroke="url(#bikeFrameGrad)" stroke-width="10.5" />
+          <!-- Top Tube (Seat cluster to Head tube) -->
+          <line x1="432" y1="262" x2="582" y2="242" stroke="url(#bikeFrameGrad)" stroke-width="9" />
+          <!-- Front Fork (Head tube to Front axle) -->
+          <path d="M 580,232 L 592,265 Q 612,325 640,375" fill="none" stroke="url(#bikeFrameGrad)" stroke-width="8.5" />
+          <!-- Stem & Handlebar Riser -->
+          <path d="M 580,232 L 573,205 L 598,200" fill="none" stroke="#e2e8f0" stroke-width="7" />
+          <!-- Drop / Cruiser Handlebar -->
+          <path d="M 580,198 Q 615,192 618,215 Q 620,232 595,232" fill="none" stroke="#f43f5e" stroke-width="6.5" />
+          <circle cx="595" cy="200" r="6" fill="#0f172a" stroke="#f43f5e" stroke-width="2" />
+
+          <!-- Headlight on Handlebar -->
+          <g id="headlightGroup">
+            <polygon id="headlightBeam" points="616,205 980,145 980,315" fill="url(#rayGrad)" opacity="0.25" />
+            <rect x="606" y="197" width="12" height="14" rx="4" fill="#334155" stroke="#94a3b8" stroke-width="1.5" />
+            <ellipse cx="618" cy="204" rx="3" ry="5" fill="#fef08a" />
+          </g>
+
+          <!-- Racing Saddle -->
+          <path d="M 398,242 Q 425,238 452,247 Q 435,256 406,252 Z" fill="#0f172a" stroke="#f43f5e" stroke-width="2" />
+
+          <!-- Axle Nuts -->
+          <circle cx="350" cy="375" r="6" fill="#e2e8f0" />
+          <circle cx="640" cy="375" r="6" fill="#e2e8f0" />
+        </g>
+
+        <!-- Chainring (Crankset Gear at 475, 375) -->
+        <g id="chainringGroup" transform="translate(475, 375)">
+          <g id="chainringSpin">
+            <circle r="25" fill="#1e293b" stroke="#cbd5e1" stroke-width="4" stroke-dasharray="5 3.2" />
+            <circle r="19" fill="none" stroke="#38bdf8" stroke-width="2" />
+            <!-- Spider arms -->
+            <line x1="-19" y1="0" x2="19" y2="0" stroke="#94a3b8" stroke-width="3.5" />
+            <line x1="0" y1="-19" x2="0" y2="19" stroke="#94a3b8" stroke-width="3.5" />
+            <circle r="7" fill="#e2e8f0" />
+          </g>
+        </g>
+
+        <!-- -------- 3D. THE MANTIS SHRIMP (皮皮虾本体) -------- -->
+        <!-- Shrimp Body Root (bobs subtly with pedaling cadence & leans during sprint) -->
+        <g id="shrimpBodyGroup">
+
+          <!-- 1) Pleopods / Swimmerets (腹部游泳足 - 5只小桨足在肚子下摆动) -->
+          <g id="pleopodsGroup" stroke="#f472b6" stroke-width="4.5" stroke-linecap="round">
+            <line id="pleopod0" x1="402" y1="226" x2="390" y2="252" />
+            <line id="pleopod1" x1="382" y1="220" x2="368" y2="246" />
+            <line id="pleopod2" x1="364" y1="210" x2="348" y2="235" />
+            <line id="pleopod3" x1="348" y1="196" x2="330" y2="220" />
+            <line id="pleopod4" x1="336" y1="180" x2="316" y2="202" />
+          </g>
+
+          <!-- 2) Tail Fan (Telson & Uropods - 标志性皮皮虾尾扇与假眼斑) -->
+          <g id="tailFanGroup" transform="translate(328, 172)">
+            <g id="tailFlutter">
+              <!-- Outer Uropod Blades -->
+              <path d="M 0,0 C -28,-22 -58,-8 -52,14 C -44,28 -16,18 0,4 Z" fill="url(#shellGradClassic)" class="shrimp-shell" stroke="#fde047" stroke-width="1.8" />
+              <path d="M -4,8 C -36,4 -60,26 -44,42 C -28,50 -8,28 2,12 Z" fill="url(#shellGradClassic)" class="shrimp-shell" stroke="#38bdf8" stroke-width="1.8" />
+              <!-- Central Telson with Eyespots -->
+              <path d="M -2,2 C -38,-8 -68,14 -50,32 C -32,42 -10,20 2,8 Z" fill="url(#bellyGradClassic)" class="shrimp-belly" stroke="#ffffff" stroke-width="1.5" />
+              <!-- Characteristic False Eyespots on Tail -->
+              <circle cx="-36" cy="14" r="6" fill="#1e1b4b" stroke="#fde047" stroke-width="1.5" />
+              <circle cx="-38" cy="12" r="2" fill="#ffffff" />
+              <!-- Marginal Spines -->
+              <path d="M-52,14 L-62,12 M-55,24 L-65,26 M-46,38 L-54,46" stroke="#fde047" stroke-width="2" stroke-linecap="round" />
+            </g>
+          </g>
+
+          <!-- 3) Segmented Abdomen & Thorax (皮皮虾弓形多节虾身 - 从尾扇到头胸甲) -->
+          <!-- Segment 6 (Lowest near tail) -->
+          <path d="M 322,175 Q 332,145 356,152 Q 354,182 332,188 Z" fill="url(#shellGradClassic)" class="shrimp-shell" stroke="#fce7f3" stroke-width="1.5" />
+          <!-- Segment 5 -->
+          <path d="M 342,162 Q 356,132 384,142 Q 378,176 352,182 Z" fill="url(#shellGradClassic)" class="shrimp-shell" stroke="#fce7f3" stroke-width="1.5" />
+          <!-- Segment 4 -->
+          <path d="M 366,154 Q 385,122 415,136 Q 406,174 378,178 Z" fill="url(#shellGradClassic)" class="shrimp-shell" stroke="#fce7f3" stroke-width="1.5" />
+          <!-- Segment 3 (Sitting curve near saddle) -->
+          <path d="M 392,152 Q 416,120 448,136 Q 436,180 404,182 Z" fill="url(#shellGradClassic)" class="shrimp-shell" stroke="#fce7f3" stroke-width="1.5" />
+          <!-- Segment 2 -->
+          <path d="M 422,150 Q 450,122 482,140 Q 466,186 432,186 Z" fill="url(#shellGradClassic)" class="shrimp-shell" stroke="#fce7f3" stroke-width="1.5" />
+          <!-- Segment 1 (Upper Thorax) -->
+          <path d="M 454,150 Q 486,124 516,146 Q 498,192 462,190 Z" fill="url(#shellGradClassic)" class="shrimp-shell" stroke="#fce7f3" stroke-width="1.5" />
+
+          <!-- Soft Ventral Belly Plates (腹甲亮边) -->
+          <path d="M 336,184 Q 405,212 492,190" fill="none" stroke="url(#bellyGradClassic)" stroke-width="10" stroke-linecap="round" opacity="0.85" />
+
+          <!-- Dorsal Ridge Markings (虾背棱线高光) -->
+          <path d="M 345,152 Q 425,126 510,145" fill="none" stroke="#fef08a" stroke-width="2.5" stroke-dasharray="10 8" opacity="0.75" />
+
+          <!-- 4) Carapace / Head Shield (头胸甲 & 拟态斑纹) -->
+          <g id="headCarapace">
+            <path d="M 488,144 C 520,124 568,132 582,160 C 586,180 552,196 502,190 Z"
+                  fill="url(#shellGradClassic)" class="shrimp-shell" stroke="#fde047" stroke-width="2" />
+            <!-- Peacock / Carapace Spots -->
+            <circle cx="522" cy="158" r="5" fill="#fef08a" opacity="0.65" />
+            <circle cx="538" cy="152" r="3.5" fill="#38bdf8" opacity="0.75" />
+            <circle cx="550" cy="164" r="4" fill="#fde047" opacity="0.55" />
+
+            <!-- Antennal Scales (扇形第二触角鳞片) -->
+            <ellipse cx="578" cy="175" rx="18" ry="7" transform="rotate(14 578 175)" fill="#22d3ee" opacity="0.8" stroke="#fef08a" stroke-width="1.5" />
+
+            <!-- Long Whipping Antennae (迎风飘动的长触须) -->
+            <path id="antennaTop" d="M 580,152 Q 520,105 430,95" fill="none" stroke="#fb7185" stroke-width="3" stroke-linecap="round" />
+            <path id="antennaMid" d="M 584,158 Q 530,120 445,112" fill="none" stroke="#fde047" stroke-width="2.5" stroke-linecap="round" />
+            <path id="antennaBot" d="M 582,165 Q 540,138 465,128" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" />
+
+            <!-- Stalked Compound Eyes (皮皮虾标志性双柄复眼 - 独立转动) -->
+            <g id="eyesGroup" transform="translate(572, 146)">
+              <!-- Eye Stalks -->
+              <line x1="-4" y1="4" x2="8" y2="-16" stroke="#f472b6" stroke-width="5" stroke-linecap="round" />
+              <line x1="4" y1="6" x2="20" y2="-12" stroke="#f43f5e" stroke-width="5" stroke-linecap="round" />
+              <!-- Left/Back Compound Eye -->
+              <g id="eyeLeft" transform="translate(8, -18)">
+                <ellipse rx="9" ry="11" transform="rotate(-15)" fill="#a3e635" stroke="#1e293b" stroke-width="2" />
+                <!-- Trinocular Pseudopupil bands (皮皮虾三段式复眼瞳孔带) -->
+                <line x1="-7" y1="-2" x2="7" y2="2" stroke="#0f172a" stroke-width="2.5" />
+                <circle cx="2" cy="-3" r="3" fill="#0f172a" />
+                <circle cx="3" cy="-5" r="1.5" fill="#ffffff" />
+              </g>
+              <!-- Right/Front Compound Eye -->
+              <g id="eyeRight" transform="translate(22, -14)">
+                <ellipse rx="10" ry="12" transform="rotate(10)" fill="#4ade80" stroke="#1e293b" stroke-width="2" />
+                <line x1="-8" y1="0" x2="8" y2="0" stroke="#0f172a" stroke-width="2.5" />
+                <circle cx="3" cy="-2" r="3.5" fill="#0f172a" />
+                <circle cx="4" cy="-4" r="1.8" fill="#ffffff" />
+              </g>
+            </g>
+
+            <!-- Optional Aero Cycling Helmet & Visor (Toggled via UI) -->
+            <g id="helmetGroup"transform="translate(542, 132)">
+              <path d="M -28,10 Q -5,-18 35,-6 Q 52,0 44,12 Z" fill="#f43f5e" stroke="#ffffff" stroke-width="2" />
+              <path d="M -12,2 Q 8,-8 26,-2" fill="none" stroke="#fde047" stroke-width="3" stroke-linecap="round" />
+              <!-- Cool Cyan Visor Shades over eyes -->
+              <path d="M 28,-4 L 54,-10 L 48,6 L 24,6 Z" fill="#06b6d4" fill-opacity="0.75" stroke="#ffffff" stroke-width="1.5" />
+            </g>
+          </g>
+
+          <!-- 5) Raptorial Foreground Appendage (皮皮虾标志性螳螂拳前螯 - 握把/出拳) -->
+          <g id="rightRaptorialArm">
+            <!-- Merus (Upper raptorial segment) -->
+            <path id="raptorialMerus" d="M 532,175 L 552,216" stroke="url(#clawGrad)" stroke-width="14" stroke-linecap="round" />
+            <circle cx="532" cy="175" r="7" fill="#fde047" />
+            <!-- Carpus & Propodus (Folded smasher/spearer forearm reaching handlebar at 595,200) -->
+            <path id="raptorialForearm" d="M 552,216 L 595,200" stroke="url(#clawGrad)" stroke-width="11" stroke-linecap="round" />
+            <!-- Serrated Dactyl Spines (镰刀前螯锯齿) -->
+            <path id="raptorialSpines" d="M 558,218 L 596,204 L 588,220 L 578,212 L 570,222 L 562,214 Z" fill="#fef08a" stroke="#f43f5e" stroke-width="1.2" />
+            <!-- Boxing / Smasher Club Glow (Visible during Turbo Punch) -->
+            <circle id="punchShockwave" cx="602" cy="200" r="14" fill="#fde047" opacity="0" filter="url(#neonGlow)" />
+          </g>
+
+        </g>
+
+        <!-- -------- 3E. FOREGROUND (RIGHT) PEDALING LEG & CRANK -------- -->
+        <!-- Right Crank & Pedal (In front of Chainring) -->
+        <g id="rightCrankGroup">
+          <line id="rightCrankArm" x1="475" y1="375" x2="475" y2="415" stroke="#e2e8f0" stroke-width="7.5" stroke-linecap="round" />
+          <rect id="rightPedal" x="461" y="410" width="28" height="9" rx="3" fill="#0f172a" stroke="#fb7185" stroke-width="2" />
+        </g>
+
+        <!-- Right Walking Leg (2-Bone Inverse Kinematics Hip -> Knee -> Pedal) -->
+        <g id="rightLegGroup">
+          <!-- Thigh (Hip to Knee) -->
+          <line id="rightThigh" x1="440" y1="245" x2="495" y2="305" stroke="url(#shellGradClassic)" stroke-width="13" stroke-linecap="round" />
+          <!-- Auxiliary Thoracic Walking Legs (皮皮虾三对步足中的伴随步足) -->
+          <line id="auxLeg1" x1="458" y1="240" x2="504" y2="295" stroke="#f472b6" stroke-width="6" stroke-linecap="round" opacity="0.85" />
+          <line id="auxLeg2" x1="425" y1="248" x2="476" y2="312" stroke="#f472b6" stroke-width="6" stroke-linecap="round" opacity="0.85" />
+          <!-- Shin (Knee to Pedal) -->
+          <line id="rightShin" x1="495" y1="305" x2="475" y2="415" stroke="url(#clawGrad)" stroke-width="9.5" stroke-linecap="round" />
+          <!-- Knee Shell Cap -->
+          <circle id="rightKneeJoint" cx="495" cy="305" r="7" fill="#fde047" stroke="#f43f5e" stroke-width="2" />
+          <!-- Foot Claw on Pedal -->
+          <ellipse id="rightFoot" cx="475" cy="415" rx="13" ry="6.5" fill="#fb7185" stroke="#fef08a" stroke-width="1.5" />
+        </g>
+
+      </g>
+
+      <!-- ================= 4. FOREGROUND PARTICLES (BUBBLES / SPEED LINES) ================= -->
+      <g id="particlesGroup"></g>
+      <g id="speedLinesGroup" opacity="0"></g>
+    </svg>
+  </main>
+
+  <!-- Control Panel -->
+  <section class="w-full max-w-5xl mt-3 glass-panel rounded-2xl p-3.5 sm:p-4 shadow-xl">
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-3.5 items-center">
+
+      <!-- Playback & Speed Slider (5 cols) -->
+      <div class="md:col-span-5 flex flex-wrap sm:flex-nowrap items-center gap-2.5">
+        <button id="togglePlayBtn" type="button" class="px-3.5 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 active:scale-95 transition font-bold text-xs sm:text-sm flex items-center gap-1.5 shadow-lg shadow-rose-500/25 shrink-0">
+          <span id="playIcon">⏸</span>
+          <span id="playLabel">暂停</span>
+        </button>
+
+        <div class="flex-1 flex items-center gap-2 bg-slate-900/90 px-3 py-1.5 rounded-xl border border-slate-800">
+          <label for="speedSlider" class="text-xs text-slate-400 whitespace-nowrap">速度</label>
+          <input id="speedSlider" type="range" min="0.2" max="3.0" step="0.1" value="1.2" class="w-full cursor-pointer" />
+          <span id="speedMultiplierLabel" class="text-xs font-mono text-rose-400 w-9 text-right">1.2x</span>
+        </div>
+      </div>
+
+      <!-- Stunt & Action Buttons (4 cols) -->
+      <div class="md:col-span-4 flex flex-wrap items-center gap-2">
+        <button id="turboBtn" type="button" class="flex-1 px-3 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 active:scale-95 transition font-bold text-xs text-slate-950 shadow-md whitespace-nowrap">
+          ⚡ 螳螂拳氮气冲刺
+        </button>
+        <button id="wheelieBtn" type="button" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 transition font-semibold text-xs border border-slate-700 whitespace-nowrap">
+          🚲 翘头特技
+        </button>
+        <button id="jumpBtn" type="button" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 transition font-semibold text-xs border border-slate-700 whitespace-nowrap">
+          🦘 兔跳
+        </button>
+      </div>
+
+      <!-- Theme & Skin Selectors (3 cols) -->
+      <div class="md:col-span-3 flex items-center justify-end gap-2">
+        <select id="skinSelect" aria-label="选择皮皮虾外观" class="bg-slate-900 text-slate-200 text-xs font-semibold px-2.5 py-2 rounded-xl border border-slate-700 focus:outline-none focus:border-rose-400 cursor-pointer">
+          <option value="classic">🦐 经典海鲜粉紫</option>
+          <option value="peacock">🌈 彩虹雀尾螳螂虾</option>
+          <option value="gold">✨ 黄金椒盐皮皮虾</option>
+        </select>
+
+        <select id="sceneSelect" aria-label="选择骑行场景" class="bg-slate-900 text-slate-200 text-xs font-semibold px-2.5 py-2 rounded-xl border border-slate-700 focus:outline-none focus:border-cyan-400 cursor-pointer">
+          <option value="ocean">🌊 海底公路</option>
+          <option value="sunset">🌅 海滨日落</option>
+          <option value="neon">🌃 深海霓虹</option>
+        </select>
+
+        <button id="helmetToggleBtn" type="button" title="切换破风头盔" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-cyan-500/40 text-xs transition">
+          🪖
+        </button>
+      </div>
+
+    </div>
+  </section>
+
+  <script>
+    (function () {
+      // ==================== STATE & CONFIG ====================
+      const state = {
+        isPlaying: true,
+        speedMultiplier: 1.2,
+        turboTimer: 0,
+        crankAngle: 0,
+        wheelAngle: 0,
+        roadOffset: 0,
+        distanceKm: 0,
+        // Physics for Bunny Hop (Jump)
+        jumpY: 0,
+        jumpVy: 0,
+        isJumping: false,
+        // Wheelie state
+        isWheelie: false,
+        wheelieAngle: 0,
+        // Punch animation timer
+        punchTimer: 0,
+        // Appearance
+        skin: 'classic',
+        scene: 'ocean',
+        helmetOn: true,
+        lastTime: performance.now()
+      };
+
+      // DOM Elements
+      const stageSvg = document.getElementById('stageSvg');
+      const masterBikeRig = document.getElementById('masterBikeRig');
+      const bikeShadow = document.getElementById('bikeShadow');
+      const shrimpBodyGroup = document.getElementById('shrimpBodyGroup');
+      const rearWheelSpin = document.getElementById('rearWheelSpin');
+      const frontWheelSpin = document.getElementById('frontWheelSpin');
+      const chainringSpin = document.getElementById('chainringSpin');
+      const bikeChain = document.getElementById('bikeChain');
+      const roadDashes = document.getElementById('roadDashes');
+      const pebblesGroup = document.getElementById('pebblesGroup');
+      const midBgGroup = document.getElementById('midBgGroup');
+      const particlesGroup = document.getElementById('particlesGroup');
+      const speedLinesGroup = document.getElementById('speedLinesGroup');
+
+      // Shrimp anatomical elements
+      const leftCrankArm = document.getElementById('leftCrankArm');
+      const leftPedal = document.getElementById('leftPedal');
+      const rightCrankArm = document.getElementById('rightCrankArm');
+      const rightPedal = document.getElementById('rightPedal');
+
+      const rightThigh = document.getElementById('rightThigh');
+      const rightShin = document.getElementById('rightShin');
+      const rightKneeJoint = document.getElementById('rightKneeJoint');
+      const rightFoot = document.getElementById('rightFoot');
+      const auxLeg1 = document.getElementById('auxLeg1');
+      const auxLeg2 = document.getElementById('auxLeg2');
+
+      const leftThigh = document.getElementById('leftThigh');
+      const leftShin = document.getElementById('leftShin');
+      const leftKneeJoint = document.getElementById('leftKneeJoint');
+      const leftFoot = document.getElementById('leftFoot');
+
+      const pleopods = [
+        document.getElementById('pleopod0'),
+        document.getElementById('pleopod1'),
+        document.getElementById('pleopod2'),
+        document.getElementById('pleopod3'),
+        document.getElementById('pleopod4')
+      ];
+      const tailFlutter = document.getElementById('tailFlutter');
+      const antennaTop = document.getElementById('antennaTop');
+      const antennaMid = document.getElementById('antennaMid');
+      const antennaBot = document.getElementById('antennaBot');
+      const eyeLeft = document.getElementById('eyeLeft');
+      const eyeRight = document.getElementById('eyeRight');
+      const raptorialMerus = document.getElementById('raptorialMerus');
+      const raptorialForearm = document.getElementById('raptorialForearm');
+      const raptorialSpines = document.getElementById('raptorialSpines');
+      const punchShockwave = document.getElementById('punchShockwave');
+      const helmetGroup = document.getElementById('helmetGroup');
+
+      // Scene Elements
+      const skyRect = document.getElementById('skyRect');
+      const lightRaysGroup = document.getElementById('lightRaysGroup');
+      const farBgGroup = document.getElementById('farBgGroup');
+      const roadShoulder = document.getElementById('roadShoulder');
+      const celestialBody = document.getElementById('celestialBody');
+      const celestialCore = document.getElementById('celestialCore');
+
+      // UI Controls
+      const togglePlayBtn = document.getElementById('togglePlayBtn');
+      const playIcon = document.getElementById('playIcon');
+      const playLabel = document.getElementById('playLabel');
+      const speedSlider = document.getElementById('speedSlider');
+      const speedMultiplierLabel = document.getElementById('speedMultiplierLabel');
+      const turboBtn = document.getElementById('turboBtn');
+      const wheelieBtn = document.getElementById('wheelieBtn');
+      const jumpBtn = document.getElementById('jumpBtn');
+      const skinSelect = document.getElementById('skinSelect');
+      const sceneSelect = document.getElementById('sceneSelect');
+      const helmetToggleBtn = document.getElementById('helmetToggleBtn');
+
+      const speedReadout = document.getElementById('speedReadout');
+      const cadenceReadout = document.getElementById('cadenceReadout');
+      const distanceReadout = document.getElementById('distanceReadout');
+      const speechBubble = document.getElementById('speechBubble');
+      const speechText = document.getElementById('speechText');
+
+      // ==================== INITIALIZE SCENERY & PARTICLES ====================
+      const pebbles = [];
+      for (let i = 0; i < 18; i++) {
+        const el = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+        const rx = 2 + Math.random() * 5;
+        const ry = 1 + Math.random() * 2;
+        const x = Math.random() * 1050;
+        const y = 442 + Math.random() * 88;
+        el.setAttribute('rx', rx.toFixed(1));
+        el.setAttribute('ry', ry.toFixed(1));
+        el.setAttribute('cx', x.toFixed(1));
+        el.setAttribute('cy', y.toFixed(1));
+        pebblesGroup.appendChild(el);
+        pebbles.push({ el, x, y, speedFactor: 1.0 });
+      }
+
+      // Midground Kelp & Coral clusters
+      const midProps = [];
+      for (let i = 0; i < 7; i++) {
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        const x = i * 165 + Math.random() * 40;
+        const scale = 0.65 + Math.random() * 0.55;
+        const hueType = i % 3;
+        const color = hueType === 0 ? '#0d9488' : hueType === 1 ? '#e11d48' : '#7c3aed';
+        g.innerHTML = `
+          <path d="M 0,430 Q -14,380 4,340 Q 20,300 0,260 Q 16,305 12,345 Q -4,385 14,430 Z" fill="${color}" opacity="0.55" />
+          <path d="M 18,430 Q 32,390 16,360 Q 6,330 22,300 Q 14,335 26,365 Q 38,395 28,430 Z" fill="${color}" opacity="0.45" />
+          <circle cx="8" cy="252" r="5" fill="#fef08a" opacity="0.5" />
+        `;
+        midBgGroup.appendChild(g);
+        midProps.push({ el: g, x, scale, phase: Math.random() * Math.PI * 2 });
+      }
+
+      // Bubbles / Wake Particles
+      const particles = [];
+      for (let i = 0; i < 22; i++) {
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        const r = 2 + Math.random() * 5.5;
+        c.setAttribute('r', r.toFixed(1));
+        c.setAttribute('fill', 'none');
+        c.setAttribute('stroke', '#bae6fd');
+        c.setAttribute('stroke-width', '1.5');
+        c.setAttribute('opacity', '0.6');
+        particlesGroup.appendChild(c);
+        particles.push({
+          el: c,
+          x: Math.random() * 1000,
+          y: 60 + Math.random() * 360,
+          vx: -(30 + Math.random() * 60),
+          vy: -(15 + Math.random() * 35),
+          r
+        });
+      }
+
+      // Speed lines for Turbo mode
+      const speedLines = [];
+      for (let i = 0; i < 10; i++) {
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        const y = 80 + i * 34;
+        const len = 80 + Math.random() * 110;
+        line.setAttribute('y1', y);
+        line.setAttribute('y2', y);
+        line.setAttribute('stroke', '#fef08a');
+        line.setAttribute('stroke-width', '2');
+        line.setAttribute('stroke-linecap', 'round');
+        line.setAttribute('opacity', '0.65');
+        speedLinesGroup.appendChild(line);
+        speedLines.push({ el: line, x: Math.random() * 1000, len });
+      }
+
+      // ==================== 2-BONE INVERSE KINEMATICS (IK) ====================
+      // Computes knee joint position (kx, ky) given hip (hx, hy) and foot/pedal (px, py)
+      // with thigh length L1 and shin length L2, bending forward (knee to the right).
+      function solveLegIK(hx, hy, px, py, L1, L2) {
+        const dx = px - hx;
+        const dy = py - hy;
+        let d = Math.hypot(dx, dy);
+        const maxReach = L1 + L2 - 0.5;
+        const minReach = Math.abs(L1 - L2) + 0.5;
+        if (d > maxReach) d = maxReach;
+        if (d < minReach) d = minReach;
+
+        const cosAngle = (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d);
+        const clampedCos = Math.max(-1, Math.min(1, cosAngle));
+        const baseAngle = Math.atan2(dy, dx);
+        const offsetAngle = Math.acos(clampedCos);
+
+        // Bend knee forward (smaller angle in SVG coordinates where +Y is down, +X is right)
+        const theta = baseAngle - offsetAngle;
+        return {
+          kx: hx + L1 * Math.cos(theta),
+          ky: hy + L1 * Math.sin(theta)
+        };
+      }
+
+      // ==================== SPEECH TOAST HELPER ====================
+      let speechTimeout = null;
+      function showSpeech(msg) {
+        speechText.textContent = msg;
+        speechBubble.classList.remove('opacity-0', 'translate-y-2');
+        speechBubble.classList.add('opacity-100', 'translate-y-0');
+        if (speechTimeout) clearTimeout(speechTimeout);
+        speechTimeout = setTimeout(() => {
+          speechBubble.classList.remove('opacity-100', 'translate-y-0');
+          speechBubble.classList.add('opacity-0', 'translate-y-2');
+        }, 2100);
+      }
+
+      // ==================== ACTIONS & STUNTS ====================
+      function triggerJump() {
+        if (!state.isJumping) {
+          state.isJumping = true;
+          state.jumpVy = -460;
+          showSpeech('🦐 飞跃海面！芜湖～');
+        }
+      }
+
+      function triggerTurbo() {
+        state.turboTimer = 2.6;
+        state.punchTimer = 1.2;
+        showSpeech('🥊 雀尾螳螂拳 · 音速冲刺！！');
+      }
+
+      function toggleWheelie() {
+        state.isWheelie = !state.isWheelie;
+        wheelieBtn.classList.toggle('bg-rose-500/30', state.isWheelie);
+        wheelieBtn.classList.toggle('border-rose-400', state.isWheelie);
+        showSpeech(state.isWheelie ? '🚲 独轮翘头特技开启！' : '🚲 四平八稳巡航模式');
+      }
+
+      // ==================== SKIN & SCENE UPDATERS ====================
+      function applySkin(skin) {
+        state.skin = skin;
+        const shellGradId =
+          skin === 'peacock'
+            ? 'url(#shellGradPeacock)'
+            : skin === 'gold'
+            ? 'url(#shellGradGold)'
+            : 'url(#shellGradClassic)';
+        const bellyGradId =
+          skin === 'peacock'
+            ? 'url(#bellyGradPeacock)'
+            : skin === 'gold'
+            ? 'url(#bellyGradGold)'
+            : 'url(#bellyGradClassic)';
+
+        document.querySelectorAll('.shrimp-shell').forEach((el) => {
+          el.setAttribute('fill', shellGradId);
+        });
+        document.querySelectorAll('.shrimp-belly').forEach((el) => {
+          el.setAttribute('fill', bellyGradId);
+        });
+        rightThigh.setAttribute('stroke', shellGradId);
+
+        if (skin === 'peacock') {
+          showSpeech('🌈 切换皮肤：彩虹雀尾螳螂虾！');
+        } else if (skin === 'gold') {
+          showSpeech('✨ 切换皮肤：黄金椒盐皮皮虾！');
+        } else {
+          showSpeech('🦐 切换皮肤：经典海鲜皮皮虾！');
+        }
+      }
+
+      function applyScene(scene) {
+        state.scene = scene;
+        if (scene === 'ocean') {
+          skyRect.setAttribute('fill', 'url(#bgGradOcean)');
+          lightRaysGroup.setAttribute('opacity', '0.85');
+          farBgGroup.setAttribute('fill', '#0369a1');
+          roadShoulder.setAttribute('fill', '#0ea5e9');
+          celestialBody.setAttribute('fill', '#fef08a');
+          celestialCore.setAttribute('fill', '#fde047');
+          showSpeech('🌊 场景：比奇堡海底公路');
+        } else if (scene === 'sunset') {
+          skyRect.setAttribute('fill', 'url(#bgGradSunset)');
+          lightRaysGroup.setAttribute('opacity', '0.18');
+          farBgGroup.setAttribute('fill', '#4c0519');
+          roadShoulder.setAttribute('fill', '#fb7185');
+          celestialBody.setAttribute('fill', '#fb923c');
+          celestialCore.setAttribute('fill', '#fef08a');
+          showSpeech('🌅 场景：海滨日落大道');
+        } else {
+          skyRect.setAttribute('fill', 'url(#bgGradNeon)');
+          lightRaysGroup.setAttribute('opacity', '0.08');
+          farBgGroup.setAttribute('fill', '#3b0764');
+          roadShoulder.setAttribute('fill', '#c084fc');
+          celestialBody.setAttribute('fill', '#22d3ee');
+          celestialCore.setAttribute('fill', '#f472b6');
+          showSpeech('🌃 场景：深海赛博霓虹');
+        }
+      }
+
+      // ==================== ANIMATION LOOP ====================
+      function updateAndRender(now) {
+        const dt = Math.min(0.05, (now - state.lastTime) / 1000);
+        state.lastTime = now;
+
+        if (state.isPlaying) {
+          // Handle Turbo decay
+          if (state.turboTimer > 0) {
+            state.turboTimer = Math.max(0, state.turboTimer - dt);
+          }
+          if (state.punchTimer > 0) {
+            state.punchTimer = Math.max(0, state.punchTimer - dt);
+          }
+
+          const turboBoost = state.turboTimer > 0 ? 2.15 : 1.0;
+          const effSpeed = state.speedMultiplier * turboBoost;
+
+          // Update Telemetry
+          const kmh = (effSpeed * 24.0).toFixed(1);
+          const rpm = Math.round(effSpeed * 75);
+          state.distanceKm += (effSpeed * 24.0 * dt) / 3600;
+          speedReadout.textContent = kmh;
+          cadenceReadout.textContent = rpm;
+          distanceReadout.textContent = state.distanceKm.toFixed(2);
+
+          // Advance Crank & Wheel Angles
+          const crankOmega = effSpeed * 6.2; // rad/s
+          state.crankAngle = (state.crankAngle + crankOmega * dt) % (Math.PI * 2);
+          state.wheelAngle = (state.wheelAngle + crankOmega * 95 * dt) % 360;
+
+          // Rotate Wheels & Chainring
+          rearWheelSpin.setAttribute('transform', `rotate(${state.wheelAngle.toFixed(1)})`);
+          frontWheelSpin.setAttribute('transform', `rotate(${state.wheelAngle.toFixed(1)})`);
+          chainringSpin.setAttribute('transform', `rotate(${((state.crankAngle * 180) / Math.PI).toFixed(1)})`);
+
+          // Animate Chain & Road Dashes
+          state.roadOffset = (state.roadOffset + effSpeed * 320 * dt) % 900;
+          roadDashes.setAttribute('stroke-dashoffset', state.roadOffset.toFixed(1));
+          bikeChain.setAttribute('stroke-dashoffset', (-state.roadOffset * 0.35).toFixed(1));
+
+          // Scroll Foreground Pebbles
+          for (let i = 0; i < pebbles.length; i++) {
+            const p = pebbles[i];
+            p.x -= effSpeed * 320 * dt;
+            if (p.x < -20) p.x += 1050;
+            p.el.setAttribute('cx', p.x.toFixed(1));
+          }
+
+          // Scroll & Sway Midground Kelp/Corals
+          for (let i = 0; i < midProps.length; i++) {
+            const m = midProps[i];
+            m.x -= effSpeed * 115 * dt;
+            if (m.x < -80) m.x += 1140;
+            const sway = Math.sin(now * 0.003 + m.phase) * 5;
+            m.el.setAttribute(
+              'transform',
+              `translate(${m.x.toFixed(1)}, ${(430 - 430 * m.scale).toFixed(1)}) scale(${m.scale.toFixed(2)}) skewX(${sway.toFixed(1)})`
+            );
+          }
+
+          // Update Bubbles / Wake Particles
+          for (let i = 0; i < particles.length; i++) {
+            const pt = particles[i];
+            pt.x += pt.vx * effSpeed * dt * 1.8;
+            pt.y += pt.vy * dt;
+            if (pt.x < -20 || pt.y < -15) {
+              // Respawn near rear wheel or across screen
+              if (Math.random() < 0.55) {
+                pt.x = 320 + Math.random() * 40;
+                pt.y = 350 + Math.random() * 65 + state.jumpY;
+              } else {
+                pt.x = 1010;
+                pt.y = 80 + Math.random() * 330;
+              }
+            }
+            pt.el.setAttribute('cx', pt.x.toFixed(1));
+            pt.el.setAttribute('cy', pt.y.toFixed(1));
+          }
+
+          // Turbo Speed Lines
+          if (state.turboTimer > 0) {
+            speedLinesGroup.setAttribute('opacity', Math.min(1, state.turboTimer).toFixed(2));
+            for (let i = 0; i < speedLines.length; i++) {
+              const sl = speedLines[i];
+              sl.x -= 1400 * dt;
+              if (sl.x < -200) sl.x = 1050 + Math.random() * 200;
+              sl.el.setAttribute('x1', sl.x.toFixed(1));
+              sl.el.setAttribute('x2', (sl.x + sl.len).toFixed(1));
+            }
+          } else {
+            speedLinesGroup.setAttribute('opacity', '0');
+          }
+
+          // Bunny Hop Physics
+          if (state.isJumping) {
+            state.jumpY += state.jumpVy * dt;
+            state.jumpVy += 1250 * dt; // Gravity
+            if (state.jumpY >= 0) {
+              state.jumpY = 0;
+              state.jumpVy = 0;
+              state.isJumping = false;
+            }
+          }
+
+          // Smooth Wheelie Angle Transition
+          const targetWheelie = state.isWheelie ? -18 : state.turboTimer > 0 ? -7 : 0;
+          state.wheelieAngle += (targetWheelie - state.wheelieAngle) * Math.min(1, dt * 8);
+
+          // Suspension Bounce
+          const bounceY = Math.sin(state.crankAngle * 2) * 2.8 + state.jumpY;
+          masterBikeRig.setAttribute(
+            'transform',
+            `translate(0, ${bounceY.toFixed(2)}) rotate(${state.wheelieAngle.toFixed(2)}, 350, 375)`
+          );
+
+          // Update Ground Shadow with Jump Height
+          const shadowScale = Math.max(0.45, 1 + state.jumpY / 260);
+          bikeShadow.setAttribute('rx', (175 * shadowScale).toFixed(1));
+          bikeShadow.setAttribute('opacity', (0.6 * shadowScale).toFixed(2));
+
+          // ==================== CRANK & 2-BONE LEG IK ====================
+          const bbX = 475;
+          const bbY = 375;
+          const crankR = 40;
+
+          // Right Pedal Position (Foreground)
+          const rPx = bbX + crankR * Math.cos(state.crankAngle);
+          const rPy = bbY + crankR * Math.sin(state.crankAngle);
+          rightCrankArm.setAttribute('x2', rPx.toFixed(1));
+          rightCrankArm.setAttribute('y2', rPy.toFixed(1));
+          rightPedal.setAttribute('x', (rPx - 14).toFixed(1));
+          rightPedal.setAttribute('y', (rPy - 4.5).toFixed(1));
+
+          // Left Pedal Position (Background, +PI phase)
+          const lAngle = state.crankAngle + Math.PI;
+          const lPx = bbX + crankR * Math.cos(lAngle);
+          const lPy = bbY + crankR * Math.sin(lAngle);
+          leftCrankArm.setAttribute('x2', lPx.toFixed(1));
+          leftCrankArm.setAttribute('y2', lPy.toFixed(1));
+          leftPedal.setAttribute('x', (lPx - 14).toFixed(1));
+          leftPedal.setAttribute('y', (lPy - 4.5).toFixed(1));
+
+          // Shrimp Body Dynamic Bobbing & Lean
+          const bodyBobY = Math.sin(state.crankAngle * 2 - 0.5) * 4.2;
+          const bodyPitch = state.turboTimer > 0 ? 5.5 : Math.cos(state.crankAngle * 2) * 1.8;
+          shrimpBodyGroup.setAttribute(
+            'transform',
+            `translate(0, ${bodyBobY.toFixed(2)}) rotate(${bodyPitch.toFixed(2)}, 435, 240)`
+          );
+
+          // Hip Coordinates (shifted slightly with bodyBobY)
+          const rHipX = 440;
+          const rHipY = 242 + bodyBobY;
+          const rIK = solveLegIK(rHipX, rHipY, rPx, rPy, 88, 92);
+
+          rightThigh.setAttribute('x1', rHipX.toFixed(1));
+          rightThigh.setAttribute('y1', rHipY.toFixed(1));
+          rightThigh.setAttribute('x2', rIK.kx.toFixed(1));
+          rightThigh.setAttribute('y2', rIK.ky.toFixed(1));
+
+          rightShin.setAttribute('x1', rIK.kx.toFixed(1));
+          rightShin.setAttribute('y1', rIK.ky.toFixed(1));
+          rightShin.setAttribute('x2', rPx.toFixed(1));
+          rightShin.setAttribute('y2', rPy.toFixed(1));
+
+          rightKneeJoint.setAttribute('cx', rIK.kx.toFixed(1));
+          rightKneeJoint.setAttribute('cy', rIK.ky.toFixed(1));
+          rightFoot.setAttribute('cx', rPx.toFixed(1));
+          rightFoot.setAttribute('cy', (rPy - 3).toFixed(1));
+
+          // Auxiliary Thoracic Legs (move rhythmically with main thigh)
+          auxLeg1.setAttribute('x1', (rHipX + 18).toFixed(1));
+          auxLeg1.setAttribute('y1', (rHipY - 4).toFixed(1));
+          auxLeg1.setAttribute('x2', (rIK.kx + 12).toFixed(1));
+          auxLeg1.setAttribute('y2', (rIK.ky - 12).toFixed(1));
+
+          auxLeg2.setAttribute('x1', (rHipX - 14).toFixed(1));
+          auxLeg2.setAttribute('y1', (rHipY + 4).toFixed(1));
+          auxLeg2.setAttribute('x2', (rIK.kx - 14).toFixed(1));
+          auxLeg2.setAttribute('y2', (rIK.ky + 8).toFixed(1));
+
+          // Left Leg IK (Far side)
+          const lHipX = 446;
+          const lHipY = 246 + bodyBobY;
+          const lIK = solveLegIK(lHipX, lHipY, lPx, lPy, 86, 90);
+
+          leftThigh.setAttribute('x1', lHipX.toFixed(1));
+          leftThigh.setAttribute('y1', lHipY.toFixed(1));
+          leftThigh.setAttribute('x2', lIK.kx.toFixed(1));
+          leftThigh.setAttribute('y2', lIK.ky.toFixed(1));
+
+          leftShin.setAttribute('x1', lIK.kx.toFixed(1));
+          leftShin.setAttribute('y1', lIK.ky.toFixed(1));
+          leftShin.setAttribute('x2', lPx.toFixed(1));
+          leftShin.setAttribute('y2', lPy.toFixed(1));
+
+          leftKneeJoint.setAttribute('cx', lIK.kx.toFixed(1));
+          leftKneeJoint.setAttribute('cy', lIK.ky.toFixed(1));
+          leftFoot.setAttribute('cx', lPx.toFixed(1));
+          leftFoot.setAttribute('cy', (lPy - 3).toFixed(1));
+
+          // ==================== PLEOPODS, TAIL FAN, ANTENNAE & EYES ====================
+          // 5 Pleopods (Swimmerets) wave in metachronal rhythm
+          const basePleopodCoords = [
+            [402, 226],
+            [382, 220],
+            [364, 210],
+            [348, 196],
+            [336, 180]
+          ];
+          for (let i = 0; i < pleopods.length; i++) {
+            const [bx, by] = basePleopodCoords[i];
+            const wave = Math.sin(state.crankAngle * 3 + i * 0.7) * 14;
+            pleopods[i].setAttribute('x2', (bx - 14 + wave).toFixed(1));
+            pleopods[i].setAttribute('y2', (by + 25 + Math.abs(wave) * 0.3).toFixed(1));
+          }
+
+          // Tail Fan Flutter
+          const tailAngle = Math.sin(state.crankAngle * 2 + 1.2) * (8 + effSpeed * 4);
+          tailFlutter.setAttribute('transform', `rotate(${tailAngle.toFixed(1)})`);
+
+          // Whipping Antennae in the wind
+          const windWave1 = Math.sin(now * 0.012 * effSpeed) * 14;
+          const windWave2 = Math.cos(now * 0.015 * effSpeed) * 12;
+          antennaTop.setAttribute(
+            'd',
+            `M 580,152 Q 520,${(105 + windWave1 * 0.5).toFixed(1)} 425,${(92 + windWave1).toFixed(1)}`
+          );
+          antennaMid.setAttribute(
+            'd',
+            `M 584,158 Q 530,${(120 + windWave2 * 0.5).toFixed(1)} 440,${(110 + windWave2).toFixed(1)}`
+          );
+          antennaBot.setAttribute(
+            'd',
+            `M 582,165 Q 540,${(138 - windWave1 * 0.4).toFixed(1)} 460,${(128 - windWave1 * 0.8).toFixed(1)}`
+          );
+
+          // Stalked Compound Eyes Bobbing
+          const eyeBob = Math.sin(now * 0.008) * 12;
+          eyeLeft.setAttribute('transform', `translate(8, -18) rotate(${eyeBob.toFixed(1)})`);
+          eyeRight.setAttribute('transform', `translate(22, -14) rotate(${(-eyeBob * 0.8).toFixed(1)})`);
+
+          // Raptorial Claw Turbo Punch Animation
+          if (state.punchTimer > 0) {
+            const punchWave = Math.abs(Math.sin(now * 0.045));
+            const px = 595 + punchWave * 52;
+            const py = 192 - punchWave * 12;
+            raptorialMerus.setAttribute('d', `M 532,175 L ${(555 + punchWave * 18).toFixed(1)},206`);
+            raptorialForearm.setAttribute(
+              'd',
+              `M ${(555 + punchWave * 18).toFixed(1)},206 L ${px.toFixed(1)},${py.toFixed(1)}`
+            );
+            raptorialSpines.setAttribute(
+              'transform',
+              `translate(${(punchWave * 45).toFixed(1)}, ${(-punchWave * 8).toFixed(1)})`
+            );
+            punchShockwave.setAttribute('cx', (px + 8).toFixed(1));
+            punchShockwave.setAttribute('cy', py.toFixed(1));
+            punchShockwave.setAttribute('r', (10 + punchWave * 18).toFixed(1));
+            punchShockwave.setAttribute('opacity', (0.85 * punchWave).toFixed(2));
+          } else {
+            raptorialMerus.setAttribute('d', 'M 532,175 L 552,216');
+            raptorialForearm.setAttribute('d', 'M 552,216 L 595,200');
+            raptorialSpines.setAttribute('transform', 'translate(0, 0)');
+            punchShockwave.setAttribute('opacity', '0');
+          }
+        }
+
+        requestAnimationFrame(updateAndRender);
+      }
+
+      // ==================== EVENT LISTENERS ====================
+      togglePlayBtn.addEventListener('click', () => {
+        state.isPlaying = !state.isPlaying;
+        playIcon.textContent = state.isPlaying ? '⏸' : '▶️';
+        playLabel.textContent = state.isPlaying ? '暂停' : '播放';
+        showSpeech(state.isPlaying ? '🦐 继续出发！' : '⏸ 暂停休息一下');
+      });
+
+      speedSlider.addEventListener('input', (e) => {
+        state.speedMultiplier = parseFloat(e.target.value);
+        speedMultiplierLabel.textContent = state.speedMultiplier.toFixed(1) + 'x';
+      });
+
+      turboBtn.addEventListener('click', triggerTurbo);
+      wheelieBtn.addEventListener('click', toggleWheelie);
+      jumpBtn.addEventListener('click', triggerJump);
+
+      skinSelect.addEventListener('change', (e) => {
+        applySkin(e.target.value);
+      });
+
+      sceneSelect.addEventListener('change', (e) => {
+        applyScene(e.target.value);
+      });
+
+      helmetToggleBtn.addEventListener('click', () => {
+        state.helmetOn = !state.helmetOn;
+        helmetGroup.setAttribute('opacity', state.helmetOn ? '1' : '0');
+        helmetToggleBtn.classList.toggle('border-cyan-500/40', state.helmetOn);
+        helmetToggleBtn.classList.toggle('opacity-50', !state.helmetOn);
+        showSpeech(state.helmetOn ? '🪖 已佩戴破风骑行头盔' : '🦐 已摘下头盔，露出复眼！');
+      });
+
+      stageSvg.addEventListener('click', () => {
+        triggerJump();
+      });
+
+      stageSvg.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        triggerTurbo();
+      });
+
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') {
+          e.preventDefault();
+          triggerJump();
+        } else if (e.code === 'KeyT' || e.code === 'ArrowUp') {
+          triggerTurbo();
+        } else if (e.code === 'KeyW') {
+          toggleWheelie();
+        }
+      });
+
+      // Initial greeting & start loop
+      setTimeout(() => showSpeech('皮皮虾，我们走！💨'), 400);
+      requestAnimationFrame(updateAndRender);
+    })();
+  </script>
+</body>
+</html>
